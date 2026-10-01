@@ -1,0 +1,17 @@
+Convert the attached image into a flat-color semantic segmentation map with EXACTLY the same framing and pixel alignment (every boundary must be in exactly the same place as in the original image). Use only these flat solid colors, no shading, no outlines, no gradients:
+- background: pure black #000000
+- all hair (including bangs, side locks, ponytail): pure blue #0000FF
+- tiara: yellow #FFFF00
+- face skin (forehead, cheeks, nose, chin, down to the jawline; NOT the neck): pure red #FF0000
+- ears: orange #FF8000
+- neck, shoulders, chest skin: pink #FF80C0
+- eye whites (sclera): white #FFFFFF
+- irises and pupils: cyan #00FFFF
+- eyelashes and eyelid lines: dark grey #404040
+- eyebrows: brown #804000
+- lips: magenta #FF00FF
+- earrings: light grey #C0C0C0
+- dress bodice and skirt: green #00FF00
+- left arm sleeve and right arm sleeve: dark green #008000
+- bare arms and hands: purple #8000FF
+- legs: teal #008080

@@ -1,0 +1,12 @@
+# secrets
+.env
+# regenerable intermediates (tools/build_all.sh recreates them)
+gen/aligned/
+gen/stage/
+gen/mattes/
+gen/master/
+gen/edits/nobody.*
+gen/edits/bald.jpg
+*.log
+__pycache__/
+.DS_Store
