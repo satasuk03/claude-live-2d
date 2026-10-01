@@ -2,6 +2,7 @@ import { Renderer } from './gl.js';
 import { Rig, PARAMS } from './rig.js';
 import { Controller, MicLipSync, EXPRESSIONS } from './motion.js';
 import { FaceTracker } from './tracking.js';
+import { PRESETS, PresetPlayer, GESTURES } from './presets.js';
 
 const $ = s => document.querySelector(s);
 const canvas = $('#stage');
@@ -135,25 +136,36 @@ function screenToModel(px, py) {
     if (mic.on) { mic.stop(); b.classList.remove('on'); b.textContent = 'Mic lip-sync'; return; }
     try { await mic.start(); b.classList.add('on'); b.textContent = 'Stop mic'; } catch (err) { console.error(err); b.textContent = 'Mic unavailable'; }
   };
-  // talk
+  // ---------------------------------------------------------------- voice presets
+  const presetBox = $('#presets');
+  const player = new PresetPlayer(ctrl, {
+    onLine: (p, dur) => {
+      const bub = $('#bubble'); bub.innerHTML = '<span class="jp"></span><span class="en"></span>';
+      bub.querySelector('.jp').textContent = p.text; bub.querySelector('.en').textContent = p.en;
+      bub.classList.add('show');
+      clearTimeout(window._bubbleT); window._bubbleT = setTimeout(() => bub.classList.remove('show'), dur * 1000);
+      presetBox.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.preset === p.id));
+      $('#presetNow').textContent = '· ' + p.label;
+    },
+    onEnd: () => { presetBox.querySelectorAll('button').forEach(b => b.classList.remove('on')); $('#presetNow').textContent = ''; highlightExpr(ctrl.expr); },
+  });
+  window.player = player;
+  PRESETS.forEach((p, i) => {
+    const b = document.createElement('button'); b.textContent = p.label; b.dataset.preset = p.id; b.title = `${p.text}\n${p.en}  (Shift+${i + 1})`;
+    b.onclick = () => playPreset(p);
+    presetBox.appendChild(b);
+  });
+  function playPreset(p) {
+    if (player.cur?.preset === p) { player.stop(); $('#bubble').classList.remove('show'); return; }    // click again to stop
+    player.play(p);
+  }
+  // preload once the user has interacted (AudioContext needs a gesture)
+  window.addEventListener('pointerdown', () => player.preload(), { once: true });
   $('#bTalk').onclick = () => {
-    const lines = ['Hi! Nice to meet you.', 'Want to grab some boba later?', 'This dress is my favourite, do you like it?', 'Hehe, stop staring!'];
-    const text = lines[Math.floor(Math.random() * lines.length)];
-    $('#bubble').textContent = text; $('#bubble').classList.add('show');
-    const dur = 0.35 + text.length * 0.062;
-    ctrl.speak(dur);
-    if ('speechSynthesis' in window) {
-      try {
-        const u = new SpeechSynthesisUtterance(text); u.pitch = 1.35; u.rate = 1.02;
-        const v = speechSynthesis.getVoices().find(v => /female|samantha|victoria|karen|zira|google us english/i.test(v.name));
-        if (v) u.voice = v;
-        u.onstart = () => ctrl.speak(dur * 1.1);
-        u.onend = () => { ctrl.talk = null; };
-        speechSynthesis.cancel(); speechSynthesis.speak(u);
-      } catch (e) {}
-    }
-    clearTimeout(window._bubbleT); window._bubbleT = setTimeout(() => $('#bubble').classList.remove('show'), dur * 1000 + 1400);
+    const pool = PRESETS.filter(p => p !== player.cur?.preset);
+    playPreset(pool[Math.floor(Math.random() * pool.length)]);
   };
+  $('#bJump').onclick = () => ctrl.gesture(GESTURES.jump({}));
 
   // ---------------------------------------------------------------- UI: parameter sliders
   const box = $('#params'); let group = null;
@@ -173,6 +185,10 @@ function screenToModel(px, py) {
   window.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT') return;
     const keys = Object.keys(EXPRESSIONS);
+    const dig = /^Digit([1-9])$/.exec(e.code);
+    if (dig && e.shiftKey) { const p = PRESETS[+dig[1] - 1]; if (p) playPreset(p); return; }
+    if (e.key === 'Escape' && player.cur) { player.stop(); $('#bubble').classList.remove('show'); }
+    if (e.key === 'j') $('#bJump').click();
     if (e.key >= '1' && e.key <= String(keys.length)) { const k = keys[+e.key - 1]; ctrl.setExpression(k); highlightExpr(k); }
     if (e.key === 'w') { rig.wire = !rig.wire; $('#tWire').checked = rig.wire; }
     if (e.key === 'h') document.body.classList.toggle('panel-hidden');

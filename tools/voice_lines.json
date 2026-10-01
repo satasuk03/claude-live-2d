@@ -1,0 +1,23 @@
+{
+  "model": "google/gemini-3.8-flash-tts",
+  "voice": "Leda",
+  "persona": "You are the voice of a cheerful, bright, slightly playful young anime heroine (around 18) speaking natural, native Japanese. Light, clear, youthful timbre; expressive but not exaggerated; no narration voice.",
+  "lines": [
+    { "id": "greet", "text": "こんにちは！はじめまして、よろしくね〜！",
+      "style": "Warm, friendly and bright, like greeting someone you are happy to meet. Slight sing-song on the final よろしくね〜." },
+    { "id": "jump", "text": "よーし、いっくよー！せーのっ……えいっ！",
+      "style": "Energetic and sporty. Build up on よーし、いっくよー, short pause, a held breath on せーのっ, then a sharp effortful えいっ! as she jumps." },
+    { "id": "laugh", "text": "えへへっ、ほんとに？うれしいなぁ〜！",
+      "style": "Giggling, delighted and a little embarrassed; start with a genuine soft laugh えへへっ, then melt into happiness." },
+    { "id": "surprised", "text": "えっ！？うそ、ほんとに！？",
+      "style": "Genuinely startled: a sudden sharp えっ!?, then fast, disbelieving and excited." },
+    { "id": "shy", "text": "そ、そんなに見つめないでよ……はずかしいじゃん……",
+      "style": "Flustered and shy, stammering on そ、そんな, voice getting smaller and quieter towards the end, almost mumbling." },
+    { "id": "pout", "text": "むぅ〜、なんで待っててくれなかったの？ふんっ！",
+      "style": "Sulky, childish pouting: a long grumbly むぅ〜, complaining tone, then a cute indignant ふんっ! turning away." },
+    { "id": "think", "text": "うーん……どうしようかなぁ……あっ、そうだ！",
+      "style": "Thinking out loud, slow and drawn-out on うーん and どうしようかなぁ, then a sudden bright realisation on あっ、そうだ!" },
+    { "id": "bye", "text": "今日はありがとう！またね〜、ばいばーい！",
+      "style": "Sincere thanks, then cheerful and a little wistful goodbye, waving: drawn-out ばいばーい." }
+  ]
+}

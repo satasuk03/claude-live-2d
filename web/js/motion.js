@@ -40,6 +40,8 @@ export class Controller {
     this.face = null;                 // webcam tracking result
     this.talk = null;                 // procedural speech
     this.reaction = null;
+    this.gestures = [];               // active timed gestures (presets.js), summed as parameter offsets
+    this.preset = null;               // PresetPlayer while a preset is playing
   }
   sp(name, k) { return this.springs[name] || (this.springs[name] = new Spring(this.rig.params[name] ?? 0, k)); }
 
@@ -56,10 +58,22 @@ export class Controller {
     this.reaction = { t: 0, region };
   }
 
+  // g = { dur, f(u) -> {Param: offset} } from GESTURES
+  gesture(g) { this.gestures.push({ ...g, t0: this.t }); }
+
   speak(durationSec) { this.talk = { t: 0, dur: durationSec, seed: Math.random() * 100 }; }
 
   update(dt) {
     this.t += dt; const t = this.t, P = this.rig.params;
+    this.preset?.tick();
+    // ---- gesture offsets
+    const G = {};
+    this.gestures = this.gestures.filter(g => {
+      const u = (t - g.t0) / g.dur; if (u >= 1) return false;
+      for (const [k, v] of Object.entries(g.f(Math.max(0, u)))) G[k] = (G[k] || 0) + v;
+      return true;
+    });
+    const g = k => G[k] || 0;
     if (this.exprUntil && t > this.exprUntil) { this.exprUntil = 0; this.expr = this.prevExpr || 'neutral'; }
     // ---- expression weights (smooth crossfade)
     for (const k of Object.keys(EXPRESSIONS)) {
@@ -101,20 +115,24 @@ export class Controller {
 
     const set = (name, v) => { P[name] = name in this.overrides ? this.overrides[name] : v; };
     const k = this.face ? 18 : 6.5;
-    set('AngleX', this.sp('AngleX', k).step(exprOf('AngleX', hx), dt));
-    set('AngleY', this.sp('AngleY', k).step(exprOf('AngleY', hy) + bob * 6, dt));
-    set('AngleZ', this.sp('AngleZ', k).step(exprOf('AngleZ', hz) + bob * 3, dt));
-    set('EyeBallX', this.sp('EyeBallX', 16).step(exprOf('EyeBallX', ebx), dt));
-    set('EyeBallY', this.sp('EyeBallY', 16).step(exprOf('EyeBallY', eby), dt));
+    const kg = this.gestures.length ? Math.max(k, 11) : k;          // gestures need a snappier head
+    set('AngleX', this.sp('AngleX', k).step(exprOf('AngleX', hx) + g('AngleX'), dt, kg));
+    set('AngleY', this.sp('AngleY', k).step(exprOf('AngleY', hy) + bob * 6 + g('AngleY'), dt, kg));
+    set('AngleZ', this.sp('AngleZ', k).step(exprOf('AngleZ', hz) + bob * 3 + g('AngleZ'), dt, kg));
+    set('EyeBallX', this.sp('EyeBallX', 16).step(clamp(exprOf('EyeBallX', ebx) + g('EyeBallX'), -1, 1), dt));
+    set('EyeBallY', this.sp('EyeBallY', 16).step(clamp(exprOf('EyeBallY', eby) + g('EyeBallY'), -1, 1), dt));
     set('EyeBallScale', this.sp('EyeBallScale', 8).step(exprOf('EyeBallScale', 1), dt));
     // body follows the head lazily
-    this._bx = this.sp('BodyAngleX', 3).step(P.AngleX * 0.28 + this.nb(t * 0.11) * 2.2 * idleAmt, dt);
+    this._bx = this.sp('BodyAngleX', 3).step(P.AngleX * 0.28 + this.nb(t * 0.11) * 2.2 * idleAmt + g('BodyAngleX'), dt);
     set('BodyAngleX', this._bx);
     set('BodyAngleY', this.sp('BodyAngleY', 3).step(P.AngleY * 0.15, dt));
-    set('BodyAngleZ', this.sp('BodyAngleZ', 2.5).step(P.AngleZ * 0.18 + this.nz(t * 0.09 + 4) * 1.6 * idleAmt, dt));
+    set('BodyAngleZ', this.sp('BodyAngleZ', 2.5).step(P.AngleZ * 0.18 + this.nz(t * 0.09 + 4) * 1.6 * idleAmt + g('BodyAngleZ'), dt));
+    // jump / hop translation and squash are already shaped by the gesture curves: no spring
+    set('BodyY', g('BodyY'));
+    set('BodySquash', clamp(g('BodySquash'), -1, 1));
     set('Breath', this.breath ? (Math.sin(t * Math.PI * 2 / 3.8) * 0.5 + 0.5) : 0);
-    set('ArmL', this.sp('ArmL', 2.5).step(-P.BodyAngleZ * 0.08 + this.ne(t * 0.13) * 0.25 * idleAmt + P.Breath * 0.1, dt));
-    set('ArmR', this.sp('ArmR', 2.5).step(P.BodyAngleZ * 0.08 + this.ne(t * 0.13 + 9) * 0.25 * idleAmt + P.Breath * 0.1, dt));
+    set('ArmL', this.sp('ArmL', 2.5).step(clamp(-P.BodyAngleZ * 0.08 + this.ne(t * 0.13) * 0.25 * idleAmt + P.Breath * 0.1 + g('ArmL'), -1, 1), dt, G.ArmL ? 9 : 2.5));
+    set('ArmR', this.sp('ArmR', 2.5).step(clamp(P.BodyAngleZ * 0.08 + this.ne(t * 0.13 + 9) * 0.25 * idleAmt + P.Breath * 0.1 + g('ArmR'), -1, 1), dt, G.ArmR ? 9 : 2.5));
     set('ElbowL', this.sp('ElbowL', 2).step(this.ne(t * 0.1 + 3) * 0.3 * idleAmt, dt));
     set('ElbowR', this.sp('ElbowR', 2).step(this.ne(t * 0.1 + 6) * 0.3 * idleAmt, dt));
 
@@ -173,22 +191,22 @@ export class Controller {
   }
 }
 
-// ------------------------------------------------------------------ microphone lip-sync
-export class MicLipSync {
-  constructor(ctrl) { this.ctrl = ctrl; this.on = false; }
-  async start() {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
-    this.stream = stream;
-    this.ac = new (window.AudioContext || window.webkitAudioContext)();
-    const src = this.ac.createMediaStreamSource(stream);
-    this.an = this.ac.createAnalyser(); this.an.fftSize = 2048; this.an.smoothingTimeConstant = 0.5;
-    src.connect(this.an);
+// ------------------------------------------------------------------ audio lip-sync
+// Analyses whatever is connected to `an` (mic or a voice clip): RMS -> mouth open, formant bands -> vowel.
+export class AudioMouth {
+  constructor(ctrl, ac, src = 'voice') {
+    this.ctrl = ctrl; this.ac = ac; this.src = src; this.on = false;
+    this.an = ac.createAnalyser(); this.an.fftSize = 2048; this.an.smoothingTimeConstant = 0.5;
     this.buf = new Float32Array(this.an.fftSize); this.spec = new Float32Array(this.an.frequencyBinCount);
-    this.on = true; this.ctrl.mouth.src = 'mic'; this.floor = 0.004;
+    this.floor = 0.004;
+  }
+  start() {
+    if (this.on) { this.ctrl.mouth.src = this.src; return; }
+    this.on = true; this.ctrl.mouth.src = this.src;
     const loop = () => { if (!this.on) return; this._tick(); requestAnimationFrame(loop); };
     loop();
   }
-  stop() { this.on = false; this.ctrl.mouth.src = null; this.ctrl.mouth.open = 0; this.stream?.getTracks().forEach(t => t.stop()); this.ac?.close(); }
+  stop() { this.on = false; if (this.ctrl.mouth.src === this.src) { this.ctrl.mouth.src = null; this.ctrl.mouth.open = 0; } }
   _tick() {
     this.an.getFloatTimeDomainData(this.buf);
     let rms = 0; for (const v of this.buf) rms += v * v; rms = Math.sqrt(rms / this.buf.length);
@@ -203,4 +221,18 @@ export class MicLipSync {
     const rl = lo / tot, rm = mid / tot, rh = hi / tot;
     m.a = clamp(rm * 2.2, 0, 1); m.i = clamp((rh - 0.22) * 4, 0, 1); m.o = clamp((rl - 0.55) * 3, 0, 1); m.u = clamp((rl - 0.7) * 3, 0, 1) * 0.6;
   }
+}
+
+// ------------------------------------------------------------------ microphone lip-sync
+export class MicLipSync {
+  constructor(ctrl) { this.ctrl = ctrl; this.on = false; }
+  async start() {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
+    this.stream = stream;
+    this.ac = new (window.AudioContext || window.webkitAudioContext)();
+    this.mouth = new AudioMouth(this.ctrl, this.ac, 'mic');
+    this.ac.createMediaStreamSource(stream).connect(this.mouth.an);
+    this.on = true; this.mouth.start();
+  }
+  stop() { this.on = false; this.mouth?.stop(); this.stream?.getTracks().forEach(t => t.stop()); this.ac?.close(); }
 }

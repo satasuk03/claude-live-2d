@@ -21,15 +21,19 @@ export const PARAMS = [
   ['MouthGrin', 0, 1, 0, 'Mouth'], ['MouthPout', 0, 1, 0, 'Mouth'],
   ['Cheek', 0, 1, 0, 'Face'],
   ['BodyAngleX', -10, 10, 0, 'Body'], ['BodyAngleY', -10, 10, 0, 'Body'], ['BodyAngleZ', -10, 10, 0, 'Body'],
-  ['Breath', 0, 1, 0, 'Body'],
+  ['Breath', 0, 1, 0, 'Body'], ['BodyY', -0.3, 1.5, 0, 'Body'], ['BodySquash', -1, 1, 0, 'Body'],
   ['ArmL', -1, 1, 0, 'Arms'], ['ArmR', -1, 1, 0, 'Arms'], ['ElbowL', -1, 1, 0, 'Arms'], ['ElbowR', -1, 1, 0, 'Arms'],
   ['HairFront', -1, 1, 0, 'Physics'], ['HairSideL', -1, 1, 0, 'Physics'], ['HairSideR', -1, 1, 0, 'Physics'],
+  ['HairLift', -1, 1.2, 0, 'Physics'], ['EarringLift', -1, 1.2, 0, 'Physics'],
   ['HairPony', -1, 1, 0, 'Physics'], ['EarringL', -1, 1, 0, 'Physics'], ['EarringR', -1, 1, 0, 'Physics'],
 ];
 
 // ------------------------------------------------------------------ geometry constants (model px)
 const HEAD = { cx: 1750, cy: 1010, R: 340, pivotX: 1750, pivotY: 1460 };
 const BODY = { cx: 1750, cy: 2650, R: 720, hipX: 1750, hipY: 3950, neckY: 1600 };
+const JUMP_PX = 320;          // BodyY = 1 lifts the whole model this far
+const JUMP_PHYS = 2.9;        // BodyY -> pendulum units, so a gesture's ballistic arc is ~free fall for the hair
+const FOOT_Y = 5056;          // squash/stretch pivot (bottom of the canvas)
 const ARMS = {
   L: { sx: 1040, sy: 2110, ex: 840, ey: 3000, wx: 470, wy: 3960, dir: -1 },
   R: { sx: 2460, sy: 2110, ex: 2660, ey: 3000, wx: 3030, wy: 3960, dir: 1 },
@@ -172,17 +176,20 @@ export class Rig {
   // ---------------------------------------------------------------- physics
   updatePhysics(dt) {
     const p = this.params, ph = this.physics;
-    if (!this.physicsOn) { for (const k of ['HairFront', 'HairSideL', 'HairSideR', 'HairPony', 'EarringL', 'EarringR']) p[k] = 0; return; }
+    if (!this.physicsOn) { for (const k of ['HairFront', 'HairSideL', 'HairSideR', 'HairPony', 'EarringL', 'EarringR', 'HairLift', 'EarringLift']) p[k] = 0; return; }
     const ax = (p.AngleX / 30) * 0.55 + (p.BodyAngleX / 10) * 0.35 + (this._bodySway || 0);
     const tilt = (p.AngleZ + p.BodyAngleZ) * D2R;
     const wind = Math.sin(this.t * 0.7) * 0.15 + Math.sin(this.t * 1.9 + 1.3) * 0.08;
     const ay = (p.AngleY / 30);
-    ph.bangs.step(dt, ax * 0.8, tilt, wind * 0.3);
-    ph.sideL.step(dt, ax, tilt, wind * 0.5);
-    ph.sideR.step(dt, ax, tilt, wind * 0.5);
-    ph.pony.step(dt, -ax * 0.9, -tilt, -wind * 0.4);
-    ph.earL.step(dt, ax * 0.9, tilt, 0);
-    ph.earR.step(dt, ax * 0.9, tilt, 0);
+    const ay0 = -p.BodyY * JUMP_PHYS;                                  // vertical anchor (y down)
+    ph.bangs.step(dt, ax * 0.8, tilt, wind * 0.3, ay0);
+    ph.sideL.step(dt, ax, tilt, wind * 0.5, ay0);
+    ph.sideR.step(dt, ax, tilt, wind * 0.5, ay0);
+    ph.pony.step(dt, -ax * 0.9, -tilt, -wind * 0.4, ay0);
+    ph.earL.step(dt, ax * 0.9, tilt, 0, ay0);
+    ph.earR.step(dt, ax * 0.9, tilt, 0, ay0);
+    p.HairLift = ph.hairLift.step(dt, ay0);
+    p.EarringLift = ph.earLift.step(dt, ay0);
     const out = (pd, i = 0, s = 1) => clamp(pd.angles[i] * s, -1, 1);
     p.HairFront = out(ph.bangs, 1, 1.2) + ay * 0.0;
     p.HairSideL = out(ph.sideL, 1, 1.1); p.HairSideR = out(ph.sideR, 1, 1.1);
@@ -259,7 +266,10 @@ export class Rig {
     // blend segment angles along the strand, scaled by amplitude
     const tt = Math.min(t, 1);
     const ang = clamp(a1 * (1 - tt * 0.5) + a2 * tt * 0.5, -1, 1) * S.amp * w * (up ? -1 : 1);
-    out[0] = x + d * Math.sin(ang); out[1] = y + (up ? d : -d) * (1 - Math.cos(ang));
+    // vertical physics: strands float up (tips rise, side locks flare out) or stretch down
+    const lift = this.params.HairLift * w;
+    out[0] = x + d * Math.sin(ang) + Math.sign(x - HEAD.cx) * lift * d * 0.05;
+    out[1] = y + (up ? d : -d) * (1 - Math.cos(ang)) - lift * d * (lift > 0 ? 0.11 : 0.05);
   }
 
   _faceWarp(x, y, out) {
@@ -345,7 +355,7 @@ export class Rig {
   _earring(def, x, y, out) {
     const [px, py] = EAR_PIV[def.earring];
     const a = (def.earring === 'L' ? this.params.EarringL : this.params.EarringR) * 0.42;
-    const c = Math.cos(a), s = Math.sin(a), ox = x - px, oy = y - py;
+    const c = Math.cos(a), s = Math.sin(a), ox = x - px, oy = (y - py) * (1 - this.params.EarringLift * 0.22);
     out[0] = px + ox * c - oy * s; out[1] = py + ox * s + oy * c;
   }
 
@@ -382,6 +392,7 @@ export class Rig {
     this.t += dt;
     this.updatePhysics(dt);
     const tmp = [0, 0], tmp2 = [0, 0];
+    const sq = this.params.BodySquash, sqY = 1 - sq * 0.035, sqX = 1 + sq * 0.02, lift = this.params.BodyY * JUMP_PX;
     for (const part of this.parts) {
       const R = part.rest, P = part.pos;
       for (let k = 0; k < part.nv; k++) {
@@ -400,7 +411,8 @@ export class Rig {
           if (w > 0) { this._head(x, y, -0.15, tmp2); x = lerp(x, tmp2[0], w); y = lerp(y, tmp2[1], w); }
         }
         this._body(x, y, tmp);
-        P[k * 2] = tmp[0]; P[k * 2 + 1] = tmp[1];
+        // squash & stretch about the feet, then the jump translation
+        P[k * 2] = BODY.cx + (tmp[0] - BODY.cx) * sqX; P[k * 2 + 1] = FOOT_Y + (tmp[1] - FOOT_Y) * sqY - lift;
       }
     }
     this.op = this._opacities();

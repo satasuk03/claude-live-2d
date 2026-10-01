@@ -60,9 +60,14 @@
   #camwrap.show { display: block; }
   #camwrap video { width: 100%; display: block; transform: scaleX(-1); }
   #camwrap button { position: absolute; bottom: 6px; right: 6px; padding: 4px 8px; font-size: 11px; background: rgba(0,0,0,.5); }
-  #bubble { position: fixed; left: 50%; top: 22%; transform: translate(-112%, 10px); background: rgba(255,255,255,.92); color: #2a2433; padding: 10px 16px; border-radius: 16px;
-    font: 500 14px Inter, sans-serif; opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; max-width: 300px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+  #bubble { position: fixed; left: 50%; bottom: 76%; transform: translate(-112%, 10px); background: rgba(255,255,255,.92); color: #2a2433; padding: 10px 16px; border-radius: 16px;
+    font: 500 14px Inter, sans-serif; opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; max-width: 340px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
   #bubble.show { opacity: 1; transform: translate(-112%, 0); }
+  #bubble .jp { font: 500 16px 'Hiragino Sans', 'Noto Sans JP', 'Yu Gothic', system-ui, sans-serif; display: block; }
+  #bubble .en { display: block; margin-top: 3px; font-size: 11.5px; color: #7a7088; }
+  #presets button { font-size: 11px; padding: 8px 2px; position: relative; overflow: hidden; }
+  #presets button i { position: absolute; left: 0; bottom: 0; height: 2px; width: 0; background: var(--accent); }
+  #presetNow { text-transform: none; letter-spacing: 0; color: var(--accent); font-weight: 500; margin-left: 4px; }
   #loader { position: fixed; inset: 0; display: grid; place-items: center; background: var(--bg); z-index: 10; transition: opacity .6s; }
   #loader.done { opacity: 0; pointer-events: none; }
   #loader div { text-align: center; }
@@ -94,12 +99,16 @@
       <h2>Expressions</h2>
       <div class="grid" id="exprs"></div>
 
+      <h2>Voice presets <span id="presetNow"></span></h2>
+      <div class="grid" id="presets"></div>
+
       <h2>Live input</h2>
       <div class="grid g3">
         <button id="bCam">Webcam tracking</button>
         <button id="bMic">Mic lip-sync</button>
         <button id="bTalk">Say something</button>
       </div>
+      <div class="grid" style="margin-top:6px"><button id="bJump" style="grid-column: span 4">Jump (physics test)</button></div>
 
       <h2>Framing</h2>
       <div class="grid g3">
@@ -134,7 +143,8 @@
         <div class="hint">Drag a slider to pin a parameter; double-click its row to release it.</div>
       </details>
       <div class="hint">
-        <kbd>1</kbd>–<kbd>8</kbd> expressions · <kbd>T</kbd> talk · <kbd>W</kbd> wireframe · <kbd>H</kbd> hide panel<br>
+        <kbd>1</kbd>–<kbd>8</kbd> expressions · <kbd>⇧</kbd><kbd>1</kbd>–<kbd>8</kbd> voice presets · <kbd>Esc</kbd> stop<br>
+        <kbd>J</kbd> jump · <kbd>T</kbd> talk · <kbd>W</kbd> wireframe · <kbd>H</kbd> hide panel<br>
         Scroll to zoom · Shift/right-drag to pan
       </div>
     </div>
