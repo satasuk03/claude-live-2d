@@ -1,3 +1,5 @@
+![Silver Tiara — Live2D-style real-time rig](promo/out/banner.gif)
+
 # Silver Tiara — Live2D-style rig
 
 A real-time, layered 2D puppet of the character from `ref/`, rendered with a custom
