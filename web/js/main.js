@@ -106,6 +106,7 @@ function screenToModel(px, py) {
   bindToggle('#tBreath', () => ctrl.breath, v => ctrl.breath = v);
   bindToggle('#tIdle', () => ctrl.idle, v => ctrl.idle = v);
   bindToggle('#tPhysics', () => rig.physicsOn, v => rig.physicsOn = v);
+  bindToggle('#tBust', () => rig.bustOn, v => rig.bustOn = v);
   bindToggle('#tWire', () => rig.wire, v => rig.wire = v);
   bindToggle('#tSheen', () => rig.sheenOn, v => rig.sheenOn = v);
   document.querySelectorAll('[data-frame]').forEach(b => b.onclick = () => {

@@ -25,6 +25,7 @@ export const PARAMS = [
   ['ArmL', -1, 1, 0, 'Arms'], ['ArmR', -1, 1, 0, 'Arms'], ['ElbowL', -1, 1, 0, 'Arms'], ['ElbowR', -1, 1, 0, 'Arms'],
   ['HairFront', -1, 1, 0, 'Physics'], ['HairSideL', -1, 1, 0, 'Physics'], ['HairSideR', -1, 1, 0, 'Physics'],
   ['HairLift', -1, 1.2, 0, 'Physics'], ['EarringLift', -1, 1.2, 0, 'Physics'],
+  ['BustLY', -1, 1, 0, 'Physics'], ['BustRY', -1, 1, 0, 'Physics'], ['BustX', -1, 1, 0, 'Physics'],
   ['HairPony', -1, 1, 0, 'Physics'], ['EarringL', -1, 1, 0, 'Physics'], ['EarringR', -1, 1, 0, 'Physics'],
 ];
 
@@ -34,6 +35,8 @@ const BODY = { cx: 1750, cy: 2650, R: 720, hipX: 1750, hipY: 3950, neckY: 1600 }
 const JUMP_PX = 320;          // BodyY = 1 lifts the whole model this far
 const JUMP_PHYS = 2.9;        // BodyY -> pendulum units, so a gesture's ballistic arc is ~free fall for the hair
 const FOOT_Y = 5056;          // squash/stretch pivot (bottom of the canvas)
+const BUST = { L: [1480, 2290], R: [2020, 2290], rx: 250, ry: 290, amp: 24, ampX: 14 };
+const PX_PER_UNIT = JUMP_PX / JUMP_PHYS;                // model px per physics unit
 const ARMS = {
   L: { sx: 1040, sy: 2110, ex: 840, ey: 3000, wx: 470, wy: 3960, dir: -1 },
   R: { sx: 2460, sy: 2110, ex: 2660, ey: 3000, wx: 3030, wy: 3960, dir: 1 },
@@ -46,7 +49,7 @@ const BROW_C = { L: [1615, 965], R: [1885, 958] };
 const PART_DEFS = [
   { n: 'hair_back', head: true, z: -0.55, grid: [18, 18] },
   { n: 'ponytail', head: true, z: -0.35, grid: [22, 16], strand: { key: 'pony', root: 450, len: -300, pow: 1.4, amp: 0.22 } },
-  { n: 'body', body: true, grid: [26, 60], neck: true },
+  { n: 'body', body: true, grid: [26, 60], neck: true, bust: true },
   { n: 'arm_L', arm: 'L', grid: [16, 44] },
   { n: 'arm_R', arm: 'R', grid: [16, 44] },
   { n: 'face', head: true, z: 0, grid: [44, 54], mouthWarp: true, faceWarp: true },
@@ -125,7 +128,7 @@ export class Rig {
     this.params = {}; this.paramDefs = {};
     for (const [id, mn, mx, df, grp] of PARAMS) { this.params[id] = df; this.paramDefs[id] = { min: mn, max: mx, def: df, group: grp }; }
     this.physics = makePhysics();
-    this.physicsOn = true;
+    this.physicsOn = true; this.bustOn = true;
     this.parts = [];
     for (const def of PART_DEFS) {
       let info, img;
@@ -176,7 +179,7 @@ export class Rig {
   // ---------------------------------------------------------------- physics
   updatePhysics(dt) {
     const p = this.params, ph = this.physics;
-    if (!this.physicsOn) { for (const k of ['HairFront', 'HairSideL', 'HairSideR', 'HairPony', 'EarringL', 'EarringR', 'HairLift', 'EarringLift']) p[k] = 0; return; }
+    if (!this.physicsOn) { for (const k of ['HairFront', 'HairSideL', 'HairSideR', 'HairPony', 'EarringL', 'EarringR', 'HairLift', 'EarringLift', 'BustLY', 'BustRY', 'BustX']) p[k] = 0; return; }
     const ax = (p.AngleX / 30) * 0.55 + (p.BodyAngleX / 10) * 0.35 + (this._bodySway || 0);
     const tilt = (p.AngleZ + p.BodyAngleZ) * D2R;
     const wind = Math.sin(this.t * 0.7) * 0.15 + Math.sin(this.t * 1.9 + 1.3) * 0.08;
@@ -190,6 +193,14 @@ export class Rig {
     ph.earR.step(dt, ax * 0.9, tilt, 0, ay0);
     p.HairLift = ph.hairLift.step(dt, ay0);
     p.EarringLift = ph.earLift.step(dt, ay0);
+    // chest rides on the torso: jump/hop + breathing vertically, body turn/sway sideways
+    const by = ay0 - p.Breath * 9 / PX_PER_UNIT, bx = (p.BodyAngleX * 7 + p.BodyAngleZ * 16) / PX_PER_UNIT;
+    const bOn = this.bustOn ? 1 : 0;
+    // soft limit (tanh) so take-off / landing impulses round off instead of clipping flat
+    ph.bustL.step(dt, by); ph.bustR.step(dt, by); ph.bustX.step(dt, bx);
+    p.BustLY = Math.tanh(-ph.bustL.off / ph.bustL.s0 * 0.7) * bOn;
+    p.BustRY = Math.tanh(-ph.bustR.off / ph.bustR.s0 * 0.7) * bOn;
+    p.BustX = Math.tanh(-ph.bustX.off * 4) * bOn;
     const out = (pd, i = 0, s = 1) => clamp(pd.angles[i] * s, -1, 1);
     p.HairFront = out(ph.bangs, 1, 1.2) + ay * 0.0;
     p.HairSideL = out(ph.sideL, 1, 1.1); p.HairSideR = out(ph.sideR, 1, 1.1);
@@ -270,6 +281,19 @@ export class Rig {
     const lift = this.params.HairLift * w;
     out[0] = x + d * Math.sin(ang) + Math.sign(x - HEAD.cx) * lift * d * 0.05;
     out[1] = y + (up ? d : -d) * (1 - Math.cos(ang)) - lift * d * (lift > 0 ? 0.11 : 0.05);
+  }
+
+  _bust(x, y, out) {
+    // local warp around each side of the chest, faded out before the arms, neckline and waist
+    const p = this.params, B = BUST;
+    let X = x, Y = y;
+    for (const [s, v] of [['L', p.BustLY], ['R', p.BustRY]]) {
+      const [cx, cy] = B[s], dx = (x - cx) / B.rx, dy = (y - cy) / B.ry;
+      const w = Math.exp(-2 * (dx * dx + dy * dy));
+      Y -= v * B.amp * w;
+      X -= p.BustX * B.ampX * w;
+    }
+    out[0] = X; out[1] = Y;
   }
 
   _faceWarp(x, y, out) {
@@ -404,6 +428,7 @@ export class Rig {
         if (part.strand) { this._strand(part, x, y, tmp); x = tmp[0]; y = tmp[1]; }
         if (part.earring) { this._earring(part, x, y, tmp); x = tmp[0]; y = tmp[1]; }
         if (part.arm) { this._arm(part.arm, x, y, tmp); x = tmp[0]; y = tmp[1]; }
+        if (part.bust) { this._bust(x, y, tmp); x = tmp[0]; y = tmp[1]; }
         if (part.head) { this._head(x, y, part.z, tmp); x = tmp[0]; y = tmp[1]; }
         if (part.neck) {
           // neck follows the head partially near the jaw

@@ -28,6 +28,9 @@ warp/rotation deformers driven by parameters, pendulum physics, clipping masks).
   Gemini TTS, each with a timeline of expressions and gestures (nod, tilt, look, sway, hops, jump) and
   lip-sync analysed live from the clip. `J` (or "Jump") is a squat → ballistic jump → landing squash
   that exercises vertical physics: hair and earrings float in the air and settle on landing.
+- **Chest physics**: detuned spring pair (plus a sideways spring for body sway) driving a local warp on
+  the body mesh; lags on take-off, floats in the air, rebounds on landing (`BustLY/RY/X`, toggle in
+  Behaviour).
 - Click the character to get reactions; scroll to zoom, shift/right-drag to pan,
   `W` toggles the mesh wireframe, `H` hides the panel. Every parameter is on a slider.
 
