@@ -44,6 +44,10 @@
   .toggles input::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #ddd; transition: transform .2s; }
   .toggles input:checked { background: #b58f6c; }
   .toggles input:checked::after { transform: translateX(14px); }
+  .toggles label.range { display: grid; grid-template-columns: 1fr 100px 30px; gap: 8px; }
+  .toggles label.range input { appearance: auto; width: 100%; height: 14px; background: none; }
+  .toggles label.range input::after { display: none; }
+  .toggles label.range b { font-weight: 500; color: #8f8d9c; text-align: right; font-variant-numeric: tabular-nums; }
   details summary { cursor: pointer; color: var(--muted); font-size: 10.5px; text-transform: uppercase; letter-spacing: 1.4px; font-weight: 600; margin: 16px 0 6px; list-style: none; }
   details summary::before { content: '▸ '; } details[open] summary::before { content: '▾ '; }
   .pgroup { color: var(--accent2); font-size: 11px; margin: 10px 0 2px; font-weight: 600; }
@@ -128,6 +132,7 @@
       <h2>Behaviour</h2>
       <div class="toggles">
         <label>Follow pointer <input type="checkbox" id="tFollow"></label>
+        <label class="range">Head turn limit <input type="range" id="rYaw" min="0" max="30" step="1"><b id="rYawV"></b></label>
         <label>Idle motion <input type="checkbox" id="tIdle"></label>
         <label>Auto blink <input type="checkbox" id="tBlink"></label>
         <label>Breathing <input type="checkbox" id="tBreath"></label>

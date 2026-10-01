@@ -107,6 +107,9 @@ function screenToModel(px, py) {
   bindToggle('#tIdle', () => ctrl.idle, v => ctrl.idle = v);
   bindToggle('#tPhysics', () => rig.physicsOn, v => rig.physicsOn = v);
   bindToggle('#tBust', () => rig.bustOn, v => rig.bustOn = v);
+  const yawIn = $('#rYaw'), showYaw = () => $('#rYawV').textContent = ctrl.yawLimit + '°';
+  yawIn.value = ctrl.yawLimit; showYaw();
+  yawIn.oninput = () => { ctrl.yawLimit = +yawIn.value; showYaw(); };
   bindToggle('#tWire', () => rig.wire, v => rig.wire = v);
   bindToggle('#tSheen', () => rig.sheenOn, v => rig.sheenOn = v);
   document.querySelectorAll('[data-frame]').forEach(b => b.onclick = () => {

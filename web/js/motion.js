@@ -29,6 +29,7 @@ export class Controller {
     this.rig = rig; this.t = 0;
     this.pointer = { x: 0, y: 0, active: false, last: -10 };
     this.follow = true; this.autoBlink = true; this.breath = true; this.idle = true;
+    this.yawLimit = 18;              // max left/right head turn (deg), soft-limited
     this.expr = 'neutral'; this.exprW = {}; this.exprT = {};
     for (const k of Object.keys(EXPRESSIONS)) this.exprW[k] = k === 'neutral' ? 1 : 0;
     this.overrides = {};             // params pinned by the UI sliders
@@ -116,7 +117,9 @@ export class Controller {
     const set = (name, v) => { P[name] = name in this.overrides ? this.overrides[name] : v; };
     const k = this.face ? 18 : 6.5;
     const kg = this.gestures.length ? Math.max(k, 11) : k;          // gestures need a snappier head
-    set('AngleX', this.sp('AngleX', k).step(exprOf('AngleX', hx) + g('AngleX'), dt, kg));
+    // every yaw source (pointer, webcam, idle, expressions, gestures) eases into the limit instead of hitting a wall
+    const yaw = exprOf('AngleX', hx) + g('AngleX'), L = this.yawLimit;
+    set('AngleX', this.sp('AngleX', k).step(L > 0 ? L * Math.tanh(yaw / L) : 0, dt, kg));
     set('AngleY', this.sp('AngleY', k).step(exprOf('AngleY', hy) + bob * 6 + g('AngleY'), dt, kg));
     set('AngleZ', this.sp('AngleZ', k).step(exprOf('AngleZ', hz) + bob * 3 + g('AngleZ'), dt, kg));
     set('EyeBallX', this.sp('EyeBallX', 16).step(clamp(exprOf('EyeBallX', ebx) + g('EyeBallX'), -1, 1), dt));
