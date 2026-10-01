@@ -23,7 +23,14 @@ warp/rotation deformers driven by parameters, pendulum physics, clipping masks).
   wink, pout, angry, shy (keys 1–8).
 - **Live input**: pointer follow, **webcam face tracking** (MediaPipe Face Landmarker:
   head pose, blinks, gaze, jaw, smile, pucker, brows), **microphone lip-sync**
-  (RMS + formant-band vowel guess), and a "say something" speech demo.
+  (RMS + formant-band vowel guess).
+- **8 voice presets** (Shift+1–8, or "Say something" for a random one): Japanese lines voiced with
+  Gemini TTS, each with a timeline of expressions and gestures (nod, tilt, look, sway, hops, jump) and
+  lip-sync analysed live from the clip. `J` (or "Jump") is a squat → ballistic jump → landing squash
+  that exercises vertical physics: hair and earrings float in the air and settle on landing.
+- **Chest physics**: detuned spring pair (plus a sideways spring for body sway) driving a local warp on
+  the body mesh; lags on take-off, floats in the air, rebounds on landing (`BustLY/RY/X`, toggle in
+  Behaviour).
 - Click the character to get reactions; scroll to zoom, shift/right-drag to pan,
   `W` toggles the mesh wireframe, `H` hides the panel. Every parameter is on a slider.
 
@@ -46,13 +53,18 @@ warp/rotation deformers driven by parameters, pendulum physics, clipping masks).
 numpy, opencv-python, scipy, pillow and rembg. `tools/gen.py` / `tools/img.py` are the OpenRouter
 helpers used for generation (key read from `.env`).
 
+Voice clips: edit `tools/voice_lines.json` and run `python3 tools/tts.py` (or `tools/tts.py <id>` to
+redo one take). It calls `google/gemini-3.8-flash-tts` through OpenRouter and writes trimmed mp3s to
+`web/assets/voice/`; the matching cue timelines live in `web/js/presets.js`.
+
 ## Layout
 ```
 web/index.html        viewer + UI
 web/js/gl.js          WebGL2 renderer (premultiplied alpha, stencil clipping, multiply, sheen)
 web/js/rig.js         parts, meshes, parameters, deformers
 web/js/physics.js     pendulum physics
-web/js/motion.js      idle motion, blinking, expressions, pointer/mic lip-sync
+web/js/motion.js      idle motion, blinking, expressions, gestures, mic/voice lip-sync
+web/js/presets.js     voice presets: gesture library, cue timelines, audio player
 web/js/tracking.js    webcam tracking (MediaPipe, loaded on demand from jsDelivr)
 ```
 
