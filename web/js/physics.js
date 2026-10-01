@@ -65,7 +65,8 @@ export class Lift {
       this.v += acc * h; this.m += this.v * h;
     }
     this.aPrev = anchorY;
-    this.lift = Math.max(-1, Math.min(1.2, 1 - (this.m - anchorY) / this.s0));
+    this.off = this.m - anchorY - this.s0;            // displacement from rest (anchor units, + = lagging behind)
+    this.lift = this.s0 > 0 ? Math.max(-1, Math.min(1.2, -this.off / this.s0)) : 0;
     return this.lift;
   }
 }
@@ -80,5 +81,9 @@ export function makePhysics() {
     earR: new Pendulum({ segments: 1, length: 0.5, damping: 0.035, stiffness: 0.0, scaleAngle: 1.0 }),
     hairLift: new Lift({ omega: 5.5, zeta: 0.5 }),
     earLift: new Lift({ omega: 8, zeta: 0.35 }),
+    // chest: stiffer, lightly damped springs (slightly detuned L/R), vertical + a sideways one for body sway
+    bustL: new Lift({ omega: 11, zeta: 0.22 }),
+    bustR: new Lift({ omega: 11.8, zeta: 0.24 }),
+    bustX: new Lift({ omega: 9, zeta: 0.2, gravity: 0 }),
   };
 }
