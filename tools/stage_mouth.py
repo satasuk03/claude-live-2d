@@ -41,6 +41,14 @@ def curve_at(m, x, name):
 # ---------------------------------------------------------------- measure every pass
 rest = measure(M, True)
 keys = {k: measure(IMG[k], c, d) for k, (_, c, d) in PASSES.items()}
+# the face is frontal, so the open shapes' inner edges are mirror-averaged about the corner line: shadow in one
+# corner otherwise reads as a lopsided opening (the smile pass measured flat on the left, dipped on the right)
+for k, m in keys.items():
+    if PASSES[k][1]: continue
+    line = m['yl'] + (U + 1) / 2 * (m['yr'] - m['yl'])
+    for name in ('Su', 'Sl'):
+        r = m[name] - line; m[name] = (line + (r + r[::-1]) / 2).astype(np.float32)
+    m['Su'] = np.minimum(m['Su'], m['Sl']); m['T'] = np.minimum(m['T'], m['Su']); m['B'] = np.maximum(m['B'], m['Sl'])
 chin0 = chin_y(M)
 
 # ---------------------------------------------------------------- skin under the lips (membrane fill of the master)

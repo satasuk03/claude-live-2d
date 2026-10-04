@@ -42,7 +42,6 @@ const ARMS = {
   R: { sx: 2460, sy: 2110, ex: 2660, ey: 3000, wx: 3030, wy: 3960, dir: 1 },
 };
 const EAR_PIV = { L: [1453, 1158], R: [2022, 1154] };
-const MOUTH = { cornerL: [1654, 1301], cornerR: [1815, 1302] };       // rest corners (MouthForm warp centres)
 const BROW_C = { L: [1615, 965], R: [1885, 958] };
 
 // per-part rig description; order = draw order
@@ -322,11 +321,12 @@ export class Rig {
   }
 
   _faceWarp(x, y, out) {
-    // mouth corners up/down (MouthForm), local to the mouth
-    const p = this.params;
+    // mouth corners up/down (MouthForm), local to the mouth. Centred on the current corners (the keyforms move
+    // them), and mostly handed over to the grin keyform, whose corners are already lifted
+    const p = this.params, f = this.mf, R = this.meta.mouth.rest;
     let X = x, Y = y;
-    const form = p.MouthForm;
-    for (const [cx, cy, sgn] of [[...MOUTH.cornerL, -1], [...MOUTH.cornerR, 1]]) {
+    const form = p.MouthForm * (1 - 0.7 * p.MouthGrin);
+    for (const [cx, cy, sgn] of [[R.xl + f.xl, R.yl + f.yl, -1], [R.xr + f.xr, R.yr + f.yr, 1]]) {
       const dx = (x - cx) / 46, dy = (y - cy) / 34; const w = Math.exp(-(dx * dx + dy * dy));
       Y -= form * 15 * w;
       X += sgn * form * 5 * w;
