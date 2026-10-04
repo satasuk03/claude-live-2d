@@ -6,4 +6,5 @@ python3 tools/stage_align.py
 python3 tools/stage_colorfix.py
 python3 tools/stage_hair.py
 python3 tools/stage_parts.py
+python3 tools/stage_mouth.py
 echo "layers written to web/assets/parts/"

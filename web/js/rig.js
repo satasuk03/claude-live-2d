@@ -42,7 +42,6 @@ const ARMS = {
   R: { sx: 2460, sy: 2110, ex: 2660, ey: 3000, wx: 3030, wy: 3960, dir: 1 },
 };
 const EAR_PIV = { L: [1453, 1158], R: [2022, 1154] };
-const MOUTH = { cx: 1737, upperY: 1287, cornerL: [1662, 1300], cornerR: [1842, 1300] };
 const BROW_C = { L: [1615, 965], R: [1885, 958] };
 
 // per-part rig description; order = draw order
@@ -52,13 +51,14 @@ const PART_DEFS = [
   { n: 'body', body: true, grid: [26, 60], neck: true, bust: true },
   { n: 'arm_L', arm: 'L', grid: [16, 44] },
   { n: 'arm_R', arm: 'R', grid: [16, 44] },
-  { n: 'face', head: true, z: 0, grid: [44, 54], mouthWarp: true, faceWarp: true },
-  { n: 'blush', head: true, z: 0.02, proc: 'blush', mouthWarp: false, faceWarp: true },
-  { n: 'mouth_U', head: true, z: 0.03, grid: [20, 16], mouth: 'U', mouthWarp: true },
-  { n: 'mouth_A', head: true, z: 0.03, grid: [20, 16], mouth: 'A', mouthWarp: true },
-  { n: 'mouth_E', head: true, z: 0.03, grid: [20, 16], mouth: 'E', mouthWarp: true },
-  { n: 'mouth_O', head: true, z: 0.03, grid: [20, 16], mouth: 'O', mouthWarp: true },
-  { n: 'mouth_smile', head: true, z: 0.03, grid: [20, 16], mouth: 'smile', mouthWarp: true },
+  { n: 'face', head: true, z: 0, grid: [44, 54], fine: { x: [1590, 1890], y: [1225, 1420], step: 8 }, lip: 'face', faceWarp: true },
+  { n: 'blush', head: true, z: 0.02, proc: 'blush', faceWarp: true },
+  // mouth: the opening is a stencil the interior and teeth are clipped to; the lips sit on top
+  { n: 'mouth_open', head: true, z: 0, proc: 'opening', faceWarp: true, stencilOnly: true },
+  { n: 'mouth_inner', head: true, z: 0, grid: [28, 12], inner: true, faceWarp: true, clip: 'mouth_open', clipKeep: true },
+  { n: 'teeth', head: true, z: 0, grid: [6, 4], teeth: true, clip: 'mouth_open' },
+  { n: 'lip_lower', head: true, z: 0, grid: [36, 14], lip: 'lower', faceWarp: true },
+  { n: 'lip_upper', head: true, z: 0, grid: [36, 11], lip: 'upper', faceWarp: true },
   { n: 'eyewhite_L', head: true, z: 0.02, grid: [16, 10], eye: 'L', role: 'white', mask: true },
   { n: 'iris_L', head: true, z: 0.03, grid: [8, 8], eye: 'L', role: 'iris', clip: 'eyewhite_L' },
   { n: 'lash_L', head: true, z: 0.03, grid: [24, 18], eye: 'L', role: 'lash' },
@@ -79,15 +79,27 @@ const PART_DEFS = [
 ];
 
 // ------------------------------------------------------------------ helpers
-function makeGrid(w, h, cols, rows, alphaFn) {
+// grid line positions in [0, 1]: `n` even cells, refined to `step` px cells over [a, b] (part-local px)
+function gridLines(len, n, fine) {
+  if (!fine) return Array.from({ length: n + 1 }, (_, i) => i / n);
+  const out = new Set();
+  for (let i = 0; i <= n; i++) { const p = i / n * len; if (p < fine[0] || p > fine[1]) out.add(p / len); }
+  for (let p = Math.max(0, fine[0]); p <= Math.min(len, fine[1]); p += fine[2]) out.add(p / len);
+  out.add(Math.min(len, fine[1]) / len);
+  return [...out].sort((a, b) => a - b);
+}
+
+function makeGrid(w, h, cols, rows, alphaFn, fx = null, fy = null) {
+  const us = gridLines(w, cols, fx), vs = gridLines(h, rows, fy);
+  cols = us.length - 1; rows = vs.length - 1;
   const vx = cols + 1, vy = rows + 1;
   const uv = new Float32Array(vx * vy * 2), rest = new Float32Array(vx * vy * 2);
   for (let j = 0; j < vy; j++) for (let i = 0; i < vx; i++) {
-    const k = (j * vx + i) * 2; uv[k] = i / cols; uv[k + 1] = j / rows;
+    const k = (j * vx + i) * 2; uv[k] = us[i]; uv[k + 1] = vs[j];
   }
   const tris = [], lines = [];
   for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
-    if (alphaFn && !alphaFn(i / cols, j / rows, (i + 1) / cols, (j + 1) / rows)) continue;
+    if (alphaFn && !alphaFn(us[i], vs[j], us[i + 1], vs[j + 1])) continue;
     const a = j * vx + i, b = a + 1, c = a + vx, d = c + 1;
     tris.push(a, b, d, a, d, c); lines.push(a, b, b, d, d, c, c, a, a, d);
   }
@@ -107,6 +119,11 @@ function alphaOccupancy(img) {
     for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if (d[(y * sw + x) * 4 + 3] > 0) return true;
     return false;
   };
+}
+
+function whiteCanvas() {
+  const c = document.createElement('canvas'); c.width = c.height = 2;
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, 2, 2); return c;
 }
 
 function blushCanvas() {
@@ -136,13 +153,19 @@ export class Rig {
         img = blushCanvas();
         info = { x: 1470, y: 1100, w: 560, h: 150 };
         def.grid = [16, 6];
+      } else if (def.proc === 'opening') {
+        img = whiteCanvas();
+        info = { x: 0, y: 0, w: 1, h: 1 };
+        def.grid = [this.meta.mouth.N - 1, 1];
       } else {
         info = partsJson.parts[def.n]; img = images[def.n];
         if (!info || !img) { console.warn('missing part', def.n); continue; }
       }
       const [cols, rows] = def.grid;
       const occ = def.proc ? null : alphaOccupancy(img);
-      const g = makeGrid(info.w, info.h, cols, rows, occ);
+      const F = def.fine;
+      const g = makeGrid(info.w, info.h, cols, rows, occ,
+        F && [F.x[0] - info.x, F.x[1] - info.x, F.step], F && [F.y[0] - info.y, F.y[1] - info.y, F.step]);
       for (let k = 0; k < g.n; k++) { g.rest[k * 2] = info.x + g.uv[k * 2] * info.w; g.rest[k * 2 + 1] = info.y + g.uv[k * 2 + 1] * info.h; }
       const mesh = this.r.mesh(g.uv, g.idx, g.lines);
       const tex = this.r.texture(img);
@@ -151,6 +174,7 @@ export class Rig {
     }
     this.byName = Object.fromEntries(this.parts.map(p => [p.n, p]));
     this._eyeCurves();
+    this._mouthSetup();
     this.wire = false;
     this.t = 0;
     this.sheenOn = true; this.sheenStrength = 1; this.sheenCol = [1.0, 0.97, 0.93];
@@ -297,19 +321,16 @@ export class Rig {
   }
 
   _faceWarp(x, y, out) {
-    // mouth corners up/down (MouthForm) and pout, local to the mouth
-    const p = this.params;
+    // mouth corners up/down (MouthForm), local to the mouth. Centred on the current corners (the keyforms move
+    // them), and mostly handed over to the grin keyform, whose corners are already lifted
+    const p = this.params, f = this.mf, R = this.meta.mouth.rest;
     let X = x, Y = y;
-    const form = p.MouthForm, pout = p.MouthPout;
-    for (const [cx, cy, sgn] of [[...MOUTH.cornerL, -1], [...MOUTH.cornerR, 1]]) {
+    const form = p.MouthForm * (1 - 0.7 * p.MouthGrin);
+    for (const [cx, cy, sgn] of [[R.xl + f.xl, R.yl + f.yl, -1], [R.xr + f.xr, R.yr + f.yr, 1]]) {
       const dx = (x - cx) / 46, dy = (y - cy) / 34; const w = Math.exp(-(dx * dx + dy * dy));
       Y -= form * 15 * w;
       X += sgn * form * 5 * w;
-      X -= sgn * pout * 14 * w;          // corners pull in
     }
-    // pout: lips push forward (slight upward/downward bulge)
-    const dxm = (x - MOUTH.cx) / 70, dym = (y - 1305) / 32; const wm = Math.exp(-(dxm * dxm + dym * dym));
-    Y += pout * 3 * wm * Math.sign(y - 1305);
     // cheeks rise with smile eyes
     const sm = (p.EyeLSmile + p.EyeRSmile) * 0.5;
     for (const cx of [1610, 1895]) {
@@ -363,17 +384,123 @@ export class Rig {
     out[0] = X; out[1] = Y;
   }
 
-  _mouthPatch(def, x, y, out) {
-    const p = this.params;
-    let Y = y;
-    if (def.mouth !== 'smile' && def.mouth !== 'U') {
-      const o = p.MouthOpenY;
-      const sc = 0.45 + 0.55 * smooth(0, 1, o);
-      Y = MOUTH.upperY + (y - MOUTH.upperY) * (y > MOUTH.upperY ? sc : 1);
+  // ---------------------------------------------------------------- mouth
+  // Every mouth pass was measured as a keyform: corners plus four contours sampled along u in [-1, 1]
+  // (T lip top, Su upper lip inner edge, Sl lower lip inner edge, B lip bottom), the chin drop and how far the
+  // upper teeth show below the upper lip. Parameters blend the keyforms' offsets from rest; the lips, the face
+  // around them, the interior and the opening are all placed from the blended contours.
+  _mouthSetup() {
+    const M = this.meta.mouth, R = M.rest, n = M.N;
+    const delta = (k, a, b) => Float32Array.from(k[a], (v, i) => v - R[b][i]);
+    this.mouthKeys = {};
+    for (const [name, k] of Object.entries(M.keys)) {
+      this.mouthKeys[name] = {
+        T: delta(k, 'T', 'T'), Su: delta(k, 'Su', 'Su'), Sl: delta(k, 'Sl', 'Sl'), B: delta(k, 'B', 'B'),
+        xl: k.xl - R.xl, yl: k.yl - R.yl, xr: k.xr - R.xr, yr: k.yr - R.yr, chin: k.chin, reveal: k.reveal, innerMul: k.innerMul,
+      };
     }
-    let X = x;
-    if (def.mouth === 'E') X = MOUTH.cx + (x - MOUTH.cx) * 0.76;   // the generated "ee" stretched too wide
-    out[0] = X; out[1] = Y;
+    this.mf = { T: new Float32Array(n), Su: new Float32Array(n), Sl: new Float32Array(n), B: new Float32Array(n),
+                xl: 0, yl: 0, xr: 0, yr: 0, chin: 0, reveal: 0, innerMul: [1, 1, 1] };
+  }
+
+  _mouthWeights() {
+    const p = this.params, o = p.MouthOpenY;
+    let wa = p.MouthA, wi = p.MouthI, wo = p.MouthO, wu = p.MouthU;
+    const sum = wa + wi + wo + wu || 1;
+    wa *= o / sum; wi *= o / sum; wo *= o / sum; wu *= o / sum;
+    // the U pass is a closed pucker: spoken "u" borrows a little of O's opening
+    return { A: wa, E: wi, O: wo + wu * 0.35, U: Math.min(1, wu * 0.65 + p.MouthPout), smile: p.MouthGrin };
+  }
+
+  _mouthFrame() {
+    const M = this.meta.mouth, f = this.mf, n = M.N, w = this._mouthWeights();
+    f.T.fill(0); f.Su.fill(0); f.Sl.fill(0); f.B.fill(0);
+    f.xl = f.yl = f.xr = f.yr = f.chin = 0; f.reveal = -4; f.innerMul = [1, 1, 1];
+    for (const [name, wk] of Object.entries(w)) {
+      const k = this.mouthKeys[name]; if (!k || wk === 0) continue;
+      for (let i = 0; i < n; i++) { f.T[i] += wk * k.T[i]; f.Su[i] += wk * k.Su[i]; f.Sl[i] += wk * k.Sl[i]; f.B[i] += wk * k.B[i]; }
+      f.xl += wk * k.xl; f.yl += wk * k.yl; f.xr += wk * k.xr; f.yr += wk * k.yr;
+      f.chin += wk * k.chin; f.reveal += wk * (k.reveal + 4);
+      for (let c = 0; c < 3; c++) f.innerMul[c] += wk * (k.innerMul[c] - 1);       // interior shade (O is darker)
+    }
+    // lips never pass through each other
+    const R = M.rest;
+    for (let i = 0; i < n; i++) if (R.Sl[i] + f.Sl[i] < R.Su[i] + f.Su[i]) { const m = (R.Su[i] + f.Su[i] + R.Sl[i] + f.Sl[i]) / 2; f.Su[i] = m - R.Su[i]; f.Sl[i] = m - R.Sl[i]; }
+    // the opening strip (stencil) follows the inner lip edges
+    const part = this.byName.mouth_open;
+    if (part) {
+      const xl = R.xl + f.xl, xr = R.xr + f.xr;
+      for (let i = 0; i < n; i++) {
+        const x = xl + (i / (n - 1)) * (xr - xl), su = R.Su[i] + f.Su[i], sl = R.Sl[i] + f.Sl[i];
+        // tuck the edges under the lips, except at the translucent corner tips
+        const e = Math.min(1.5, 0.3 * (sl - su)) * (1 - smooth(0.7, 1, Math.abs(i / (n - 1) * 2 - 1)));
+        part.rest[i * 2] = x; part.rest[i * 2 + 1] = su - e;
+        part.rest[(n + i) * 2] = x; part.rest[(n + i) * 2 + 1] = sl + e;
+      }
+    }
+  }
+
+  // sample a contour (or its blended offset) at mouth coordinate u
+  _mu(arr, u) {
+    const n = arr.length, s = (clamp(u, -1, 1) + 1) / 2 * (n - 1), i = Math.min(Math.floor(s), n - 2), t = s - i;
+    return arr[i] + (arr[i + 1] - arr[i]) * t;
+  }
+
+  _mouth(mode, x, y, out) {
+    const R = this.meta.mouth.rest, f = this.mf;
+    // nothing reaches past the cheeks (corner falloff), the nose (lip-top falloff) or the jaw hinge
+    if (y < R.yl - 140 || Math.abs(x - (R.xl + R.xr) / 2) > 300) { out[0] = x; out[1] = y; return; }
+    const u = 2 * (x - R.xl) / (R.xr - R.xl) - 1, inside = Math.abs(u) <= 1;
+    const T0 = this._mu(R.T, u), S0 = this._mu(R.Su, u), B0 = this._mu(R.B, u);
+    const up = mode === 'upper' || (mode === 'face' && y <= S0);
+    // outside the corners everything follows that corner, fading over the cheek
+    const cx = u < 0 ? R.xl : R.xr, cdx = u < 0 ? f.xl : f.xr, cdy = u < 0 ? f.yl : f.yr;
+    const lat = inside ? 1 : Math.exp(-(((x - cx) / 70) ** 2));
+    const dxBand = inside ? lerp(f.xl, f.xr, (u + 1) / 2) : cdx * lat;
+    const jaw = f.chin * (1 - smooth(70, 200, Math.abs(x - 1740)));     // hinged near the ears
+    let dx, dy;
+    if (up) {
+      if (inside && y >= T0) {
+        // the 2 px along the lip line ride rigidly with it, so the thin corner tips never stretch their edge open
+        const t = clamp((y - T0) / Math.max(S0 - 2 - T0, 0.5), 0, 1);
+        dy = lerp(this._mu(f.T, u), this._mu(f.Su, u), t); dx = dxBand;
+      } else {
+        // fade out above the lip (the nose stays put); the cheeks beside the corners give more slowly
+        const d = Math.max((inside ? T0 : S0) - y, 0), reach = lerp(45, 90, smooth(0.9, 1.25, Math.abs(u)));
+        const k = 1 - smooth(0, reach, d);
+        dy = (inside ? this._mu(f.T, u) : cdy * lat) * k; dx = dxBand * (1 - smooth(0, reach, d));
+      }
+    } else {
+      if (inside && y <= B0) {
+        const t = clamp((y - S0 - 2) / Math.max(B0 - S0 - 2, 0.5), 0, 1);
+        dy = lerp(this._mu(f.Sl, u), this._mu(f.B, u), t); dx = dxBand;
+      } else {
+        const d = Math.max(y - (inside ? B0 : S0), 0), k = smooth(0, 90, d);
+        dy = lerp(inside ? this._mu(f.B, u) : cdy * lat, jaw, k); dx = dxBand * (1 - smooth(0, 60, d));
+      }
+    }
+    out[0] = x + dx; out[1] = y + dy;
+  }
+
+  _inner(x, y, out) {
+    // the interior was painted in the A pass's frame: map its opening onto the current one
+    const I = this.meta.mouth.innerRef, R = this.meta.mouth.rest, f = this.mf;
+    const u = 2 * (x - I.xl) / (I.xr - I.xl) - 1;
+    const su0 = this._mu(I.Su, u), sl0 = this._mu(I.Sl, u);
+    const su = this._mu(R.Su, u) + this._mu(f.Su, u), sl = this._mu(R.Sl, u) + this._mu(f.Sl, u);
+    const xl = R.xl + f.xl, xr = R.xr + f.xr;
+    out[0] = xl + (u + 1) / 2 * (xr - xl);
+    if (y <= su0) out[1] = su + (y - su0);
+    else if (y >= sl0) out[1] = sl + (y - sl0);
+    else out[1] = lerp(su, sl, (y - su0) / Math.max(sl0 - su0, 1));
+  }
+
+  _teeth(x, y, out) {
+    // rigid: hangs from the middle of the upper lip, showing `reveal` px below its edge
+    const M = this.meta.mouth, R = M.rest, f = this.mf;
+    const cx = R.xl + f.xl + (R.xr + f.xr - R.xl - f.xl) / 2;
+    const su = this._mu(R.Su, 0) + this._mu(f.Su, 0);
+    out[0] = x + cx - M.teethRef.cx; out[1] = y + su + f.reveal - M.teethRef.yb;
   }
 
   _earring(def, x, y, out) {
@@ -392,21 +519,6 @@ export class Rig {
       op['eyewhite_' + s] = vis; op['iris_' + s] = vis; op['lash_' + s] = vis;
       op['eyesmile_' + s] = smooth(0.2, 0.8, sm) * smooth(0.05, 0.4, open + 0.3);
     }
-    // mouth: sequential "over" weights so the shapes blend like a crossfade
-    const o = smooth(0.0, 0.38, p.MouthOpenY);
-    const grin = p.MouthGrin;
-    let wa = p.MouthA, wi = p.MouthI, wo = p.MouthO, wu = p.MouthU;
-    const sum = wa + wi + wo + wu || 1;
-    wa /= sum; wi /= sum; wo /= sum; wu /= sum;
-    const W = { mouth_A: o * wa, mouth_E: o * wi, mouth_O: o * wo, mouth_U: Math.max(p.MouthPout, o * wu), mouth_smile: grin };
-    // convert to sequential opacities (draw order U, A, E, O, smile)
-    const order = ['mouth_U', 'mouth_A', 'mouth_E', 'mouth_O', 'mouth_smile'];
-    let rem = 1;
-    for (let i = order.length - 1; i >= 0; i--) {
-      const w = clamp(W[order[i]], 0, 1) * rem; const k = order[i];
-      op[k] = rem > 1e-4 ? clamp(W[k], 0, 1) : 0;
-      rem *= 1 - clamp(W[k], 0, 1);
-    }
     op.blush = p.Cheek;
     return op;
   }
@@ -415,6 +527,7 @@ export class Rig {
   update(dt) {
     this.t += dt;
     this.updatePhysics(dt);
+    this._mouthFrame();
     const tmp = [0, 0], tmp2 = [0, 0];
     const sq = this.params.BodySquash, sqY = 1 - sq * 0.035, sqX = 1 + sq * 0.02, lift = this.params.BodyY * JUMP_PX;
     for (const part of this.parts) {
@@ -423,8 +536,10 @@ export class Rig {
         let x = R[k * 2], y = R[k * 2 + 1];
         if (part.eye) { this._eye(part, x, y, tmp); x = tmp[0]; y = tmp[1]; }
         if (part.brow) { this._brow(part, x, y, tmp); x = tmp[0]; y = tmp[1]; }
-        if (part.mouth) { this._mouthPatch(part, x, y, tmp); x = tmp[0]; y = tmp[1]; }
-        if (part.faceWarp || part.mouthWarp) { this._faceWarp(x, y, tmp); x = tmp[0]; y = tmp[1]; }
+        if (part.lip) { this._mouth(part.lip, x, y, tmp); x = tmp[0]; y = tmp[1]; }
+        if (part.inner) { this._inner(x, y, tmp); x = tmp[0]; y = tmp[1]; }
+        if (part.teeth) { this._teeth(x, y, tmp); x = tmp[0]; y = tmp[1]; }
+        if (part.faceWarp) { this._faceWarp(x, y, tmp); x = tmp[0]; y = tmp[1]; }
         if (part.strand) { this._strand(part, x, y, tmp); x = tmp[0]; y = tmp[1]; }
         if (part.earring) { this._earring(part, x, y, tmp); x = tmp[0]; y = tmp[1]; }
         if (part.arm) { this._arm(part.arm, x, y, tmp); x = tmp[0]; y = tmp[1]; }
@@ -450,26 +565,30 @@ export class Rig {
   }
 
   draw() {
-    const r = this.r, op = this.op || {};
-    for (const part of this.parts) {
-      if (!part.visible) continue;
-      const o = (op[part.n] ?? 1) * part.opacity;
-      r.upload(part.mesh, part.pos);
-      if (o <= 0.002) continue;
-      if (part.mask) {
-        // draw normally, and write the clip mask for the iris
-        r.draw(part.mesh, part.tex, { opacity: o });
-        r.draw(part.mesh, part.tex, { stencilWrite: true, maskCut: 0.5 });
-        continue;
-      }
-      if (part.clip) {
-        r.draw(part.mesh, part.tex, { opacity: o, stencilTest: true });
-        r.clearStencil();
-        continue;
-      }
-      r.draw(part.mesh, part.tex, { opacity: o, blend: part.blend || 'normal', sheen: part.sheenTex && this.sheenOn ? { tex: part.sheenTex, ...this._sheen } : null });
-    }
+    const r = this.r;
+    for (const part of this.parts) if (part.visible) this.drawPart(part);
     if (this.wire) for (const part of this.parts) if (part.visible) r.drawWire(part.mesh, [0.1, 0.8, 1.0, 0.35]);
+  }
+
+  // one part with its clipping role (shared with the promo renderer); opacity scales the part's own
+  drawPart(part, scale = 1) {
+    const r = this.r, o = ((this.op || {})[part.n] ?? 1) * part.opacity * scale;
+    r.upload(part.mesh, part.pos);
+    if (part.stencilOnly) { r.draw(part.mesh, part.tex, { stencilWrite: true }); return; }
+    if (o <= 0.002) { if (part.clip && !part.clipKeep) r.clearStencil(); return; }
+    if (part.mask) {
+      // draw normally, and write the clip mask for the iris
+      r.draw(part.mesh, part.tex, { opacity: o });
+      r.draw(part.mesh, part.tex, { stencilWrite: true, maskCut: 0.5 });
+      return;
+    }
+    if (part.clip) {
+      const g = r.globalMul || [1, 1, 1], m = part.inner ? this.mf.innerMul : null;
+      r.draw(part.mesh, part.tex, { opacity: o, stencilTest: true, ...(m ? { mul: [g[0] * m[0], g[1] * m[1], g[2] * m[2]] } : {}) });
+      if (!part.clipKeep) r.clearStencil();
+      return;
+    }
+    r.draw(part.mesh, part.tex, { opacity: o, blend: part.blend || 'normal', sheen: part.sheenTex && this.sheenOn ? { tex: part.sheenTex, ...this._sheen } : null });
   }
 
   // bounds of the model for camera framing
