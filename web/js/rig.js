@@ -48,6 +48,9 @@ const BROW_C = { L: [1615, 965], R: [1885, 958] };
 const PART_DEFS = [
   { n: 'hair_back', head: true, z: -0.55, grid: [18, 18] },
   { n: 'ponytail', head: true, z: -0.35, grid: [22, 16], strand: { key: 'pony', root: 450, len: -300, pow: 1.4, amp: 0.22 } },
+  // side locks behind the body: the same lock continued behind the neck and shoulders, deformed like the front copy
+  { n: 'sideback_L', head: true, z: 0.09, grid: [14, 40], strand: { key: 'sideL', root: 960, len: 620, pow: 1.6, amp: 0.17 } },
+  { n: 'sideback_R', head: true, z: 0.09, grid: [14, 40], strand: { key: 'sideR', root: 960, len: 620, pow: 1.6, amp: 0.17 } },
   { n: 'body', body: true, grid: [26, 60], neck: true, bust: true },
   { n: 'arm_L', arm: 'L', grid: [16, 44] },
   { n: 'arm_R', arm: 'R', grid: [16, 44] },
@@ -236,7 +239,8 @@ export class Rig {
   // ---------------------------------------------------------------- deformers
   _head(x, y, z, out) {
     const p = this.params, H = HEAD;
-    const ax = p.AngleX * D2R * 0.62, ay = p.AngleY * D2R * 0.55, az = p.AngleZ * D2R;
+    // tilt and nod are toned down: past ~20 deg of roll or a strong nod, the layer seams behind the jaw and ears show
+    const ax = p.AngleX * D2R * 0.62, ay = p.AngleY * D2R * 0.4, az = p.AngleZ * D2R * 0.7;
     const dx = (x - H.cx) / H.R, dy = (y - H.cy) / H.R;
     const zf = 1 / (1 + 0.85 * dx * dx + 0.55 * dy * dy) + z;      // pseudo depth of this point
     let X = x + H.R * (zf * Math.sin(ax) - dx * (1 - Math.cos(ax)));
@@ -359,7 +363,8 @@ export class Rig {
       } else {
         const f = smooth(yb + 50, yb, y) * edge;
         const target = yc + (y - yc) * 0.55;
-        Y = y + (target - y) * Math.max(close * 0.6, smile * 0.35) * f;
+        // the smile patch is already painted as a crescent; squeezing it would uncover the closed lashes beneath
+        Y = y + (target - y) * (def.role === 'smile' ? close * 0.6 : Math.max(close * 0.6, smile * 0.35)) * f;
       }
     }
     let X = x;

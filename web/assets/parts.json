@@ -25,15 +25,29 @@
    "file": "side_L.png",
    "x": 1306,
    "y": 873,
-   "w": 333,
-   "h": 762
+   "w": 237,
+   "h": 399
+  },
+  "sideback_L": {
+   "file": "sideback_L.png",
+   "x": 1324,
+   "y": 873,
+   "w": 360,
+   "h": 1044
   },
   "side_R": {
    "file": "side_R.png",
-   "x": 1841,
+   "x": 1971,
    "y": 873,
-   "w": 343,
-   "h": 780
+   "w": 213,
+   "h": 349
+  },
+  "sideback_R": {
+   "file": "sideback_R.png",
+   "x": 1794,
+   "y": 873,
+   "w": 374,
+   "h": 1055
   },
   "tiara": {
    "file": "tiara.png",
@@ -58,9 +72,9 @@
   },
   "body": {
    "file": "body.png",
-   "x": 911,
+   "x": 906,
    "y": 1142,
-   "w": 1647,
+   "w": 1656,
    "h": 3892,
    "sheen": "sheen_body.png"
   },
