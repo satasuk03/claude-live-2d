@@ -47,7 +47,7 @@ warp/rotation deformers driven by parameters, pendulum physics, clipping masks).
    registered to the master with ECC (`gen/aligned/`).
 3. `tools/stage_hair.py` — known-background matting of the hair (alpha + unmixed colour)
    against the bald pass, a separate brow layer, tiara, colour matching of the passes.
-4. `tools/stage_parts.py` — cuts every layer (hair back/ponytail/crown/bangs/side locks,
+4. `tools/stage_parts.py` — cuts every layer (hair back/ponytail/crown/bangs/side locks, each lock also continued behind the neck and shoulders,
    face base (clean bald skin with closed eyes and the bangs' soft shadow), eye white/iris/lashes, smile eyes,
    brows, earrings, body with extended neck, arms, sheen masks) and writes
    `web/assets/parts/*.png` + `parts.json`. It also renders a reconstruction for checking.
