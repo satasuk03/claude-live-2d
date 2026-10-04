@@ -11,12 +11,11 @@ PV = '/private/tmp/claude-501/-Users-satasuk-Desktop-dev-live2d/1569c189-670b-4d
 pw = PartWriter(OUTDIR)
 
 M = load_rgb('master.jpg'); H, W = M.shape[:2]
-NA = load_rgb('aligned/noarms.png'); CL = load_rgb('aligned/closed2_c.png'); SMI = load_rgb('aligned/smile.png')
+NA = load_rgb('aligned/noarms.png'); CL = load_rgb('aligned/closed2_c.png')
 SME = load_rgb('aligned/smile2_c.png'); EC = load_rgb('aligned/eyeclean_c.png')
 NB = load_rgb('aligned/nobrow.png'); NE = load_rgb('aligned/noear.png')
 BDc = load_rgb('stage/bald_clean.png'); BD = load_rgb('aligned/bald.png')
 BDc_nb = load_rgb('stage/bald_nobrow.png')
-MOUTH = {k: load_rgb(f'aligned/{f}.png') for k, f in [('A', 'mouthA'), ('O', 'mouthO'), ('E', 'mouthE'), ('U', 'mouthU')]}
 SEG = imread('aligned/seg.png')
 FIG = load_mask('mattes/fig.png'); FIG_NA = load_mask('mattes/fig_noarms.png'); FIG_BD = load_mask('mattes/fig_bald.png')
 HA = np.load(os.path.join(ST, 'hair_a.npy')).astype(np.float32)
@@ -309,15 +308,7 @@ for s in 'LR':
     eF = unmix(M, NE, earrings[s])
     pw.save('earring_' + s, clamp_chroma(eF, np.ones_like(eF) * 0.6, 0.05), earrings[s])
 
-# ---------------------------------------------------------------- mouth patches
-mz = np.zeros((H, W), np.float32)
-cv2.ellipse(mz, (1752, 1305), (150, 95), 0, 0, 360, 1, -1)
-mz = blur(mz, 10)
-for k, img in list(MOUTH.items()) + [('smile', SMI)]:
-    d = smoothstep(0.05, 0.14, np.abs(img - M).max(2)) * mz
-    d = fill_holes(dilate((d > 0.25).astype(np.float32), 10))
-    a = blur(d, 8) * mz
-    pw.save('mouth_' + k, img, a)
+# mouth: built and rigged by stage_mouth.py
 
 # blush (procedural soft discs from the master's cheek colour)
 pw.dump(os.path.join(ROOT, 'web', 'assets', 'parts.json'), dict(canvas=dict(w=W, h=H), meta=meta))
